@@ -19,8 +19,12 @@ private let scrollTapCallback: CGEventTapCallBack = { _, type, event, _ in
         return Unmanaged.passUnretained(event)
     }
     if gestureActive.load(ordering: .relaxed) { return nil } // drop: scroll from the gesture fingers
-    if event.getIntegerValueField(.scrollWheelEventMomentumPhase) != 0 { return nil } // its momentum tail
-    // Regular scrolling again: step out of the event path.
+    // Fingers lift one by one, so the swallowed scroll keeps going (phase "changed"/"ended")
+    // and then coasts (momentum) after our gesture ended. Drop all of it.
+    if event.getIntegerValueField(.scrollWheelEventMomentumPhase) != 0 { return nil }
+    let phase = event.getIntegerValueField(.scrollWheelEventScrollPhase)
+    if phase == 2 || phase == 4 || phase == 8 { return nil } // changed, ended, cancelled
+    // A new scroll (began / may-begin) or a mouse wheel (no phase): step out of the event path.
     if let scrollTap { CGEvent.tapEnable(tap: scrollTap, enable: false) }
     return Unmanaged.passUnretained(event)
 }

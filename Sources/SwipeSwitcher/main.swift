@@ -7,8 +7,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     private let switcher = AppSwitcher()
     private let defaults = UserDefaults.standard // ≈ SharedPreferences
-    private let loginItem = NSMenuItem(title: "Buka saat login", action: #selector(toggleLogin), keyEquivalent: "")
-    private let scrollItem = NSMenuItem(title: "Tahan scroll saat gesture (izin Accessibility)", action: #selector(askScrollPermission), keyEquivalent: "")
+    private let loginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLogin), keyEquivalent: "")
+    private let scrollItem = NSMenuItem(title: "Block Scrolling During Gesture (Accessibility)", action: #selector(askScrollPermission), keyEquivalent: "")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         defaults.register(defaults: ["fingers": 4, "threshold": 10, "maxSteps": Int.max])
@@ -31,12 +31,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let fingers = defaults.integer(forKey: "fingers")
         guard systemUsesHorizontalSwipe(fingers: fingers) else { return }
         let alert = NSAlert()
-        alert.messageText = "Swipe \(fingers) jari kiri/kanan masih dipakai macOS"
-        alert.informativeText = "Saat ini macOS memakainya untuk ganti desktop, jadi keduanya akan jalan bersamaan. "
-            + "Pindahkan ganti desktop ke \(fingers == 3 ? 4 : 3) jari (kalau masih kosong) supaya swipe \(fingers) jari khusus untuk pindah app? "
-            + "Bisa dikembalikan kapan saja di System Settings › Trackpad › More Gestures."
-        alert.addButton(withTitle: "Atur otomatis")
-        alert.addButton(withTitle: "Nanti")
+        alert.messageText = "macOS already uses the \(fingers)-finger horizontal swipe"
+        alert.informativeText = "It switches desktops, so both would happen at once. "
+            + "Move desktop switching to \(fingers == 3 ? 4 : 3) fingers (if that is free) so the \(fingers)-finger swipe only switches apps? "
+            + "You can change this back anytime in System Settings › Trackpad › More Gestures."
+        alert.addButton(withTitle: "Fix Automatically")
+        alert.addButton(withTitle: "Not Now")
         NSApp.activate()
         guard alert.runModal() == .alertFirstButtonReturn else { return }
         freeHorizontalSwipe(fingers: fingers)
@@ -45,15 +45,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func makeMenu() -> NSMenu {
         let menu = NSMenu()
         menu.delegate = self
-        addChoices(to: menu, title: "Jumlah jari", key: "fingers", [
-            ("4 jari", 4),
-            ("3 jari", 3),
+        addChoices(to: menu, title: "Fingers", key: "fingers", [
+            ("4 fingers", 4),
+            ("3 fingers", 3),
         ])
-        addChoices(to: menu, title: "Threshold", key: "threshold", [
-            ("Pendek (10% lebar trackpad)", 10), ("Sedang (15%)", 15), ("Panjang (25%)", 25),
+        addChoices(to: menu, title: "Swipe Distance per Step", key: "threshold", [
+            ("Short (10% of trackpad width)", 10), ("Medium (15%)", 15), ("Long (25%)", 25),
         ])
-        addChoices(to: menu, title: "Langkah per gesture", key: "maxSteps", [
-            ("1 app", 1), ("Sampai 3 app", 3), ("Tanpa batas", Int.max),
+        addChoices(to: menu, title: "Steps per Gesture", key: "maxSteps", [
+            ("1 app", 1), ("Up to 3 apps", 3), ("Unlimited", Int.max),
         ])
         menu.addItem(.separator())
         scrollItem.target = self

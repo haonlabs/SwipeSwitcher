@@ -45,7 +45,7 @@ It works like holding ⌘ and pressing Tab, but on the trackpad.
   desktop switching moves to the other finger count if that one is free. You can change it
   back anytime in **System Settings → Trackpad → More Gestures**.
 - **Scroll blocking (optional).** Moving several fingers also makes the app under the pointer
-  scroll. To stop that, choose **Tahan scroll saat gesture** from the menu bar icon and allow
+  scroll. To stop that, choose **Block Scrolling During Gesture** from the menu bar icon and allow
   SwipeSwitcher under **Privacy & Security → Accessibility**. Without this permission, everything
   else still works.
 - **3-finger mode.** If you choose 3 fingers, turn off **Three-finger drag** under
@@ -70,10 +70,15 @@ Requires Xcode 16 or later.
 ```sh
 git clone https://github.com/haonlabs/SwipeSwitcher.git
 cd SwipeSwitcher
-./build.sh            # builds a universal SwipeSwitcher.app (ad-hoc signed)
+./build.sh            # builds a universal SwipeSwitcher.app
 open SwipeSwitcher.app
 swift test            # gesture and MRU logic tests
 ```
+
+`build.sh` signs with the first code-signing certificate in your keychain (or `SIGN_IDENTITY`),
+falling back to ad-hoc. With ad-hoc signing, macOS forgets the Accessibility permission on every
+rebuild, so create a certificate once: **Keychain Access → Certificate Assistant → Create a
+Certificate**, Identity Type *Self Signed Root*, Certificate Type *Code Signing*.
 
 `swift scripts/render-icon.swift` regenerates `AppIcon.icns`, and `./bench.sh SwipeSwitcher 60`
 samples CPU, idle wakeups, and energy impact, so you can compare against other tools.
@@ -110,8 +115,9 @@ macOS `UserDefaults`.
   distributed through the Mac App Store.
 - A Magic Trackpad connected while the app is running is picked up after the next sleep/wake
   or relaunch.
-- Release builds are ad-hoc signed. After updating, you may need to remove SwipeSwitcher from
-  the Accessibility list and add it again.
+- Releases are signed with a self-signed certificate, not notarized, so the first launch of
+  each version needs **Open Anyway**. Because the certificate stays the same, the Accessibility
+  permission carries over to new versions.
 
 ## License
 
