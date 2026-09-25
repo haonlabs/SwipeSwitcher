@@ -1,5 +1,12 @@
 # Changelog
 
+## 1.0.2
+
+### Fixed
+- Right after switching desktops, the preview listed apps from both the old and the new
+  desktop. The list is now refreshed once the desktop switch has finished, keeping the
+  selected app selected.
+
 ## 1.0.1
 
 ### Fixed

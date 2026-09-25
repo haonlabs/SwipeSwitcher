@@ -42,6 +42,11 @@ final class AppSwitcher {
             guard let app = Self.app(from: note) else { return }
             self?.mru.removed(app.processIdentifier)
         }
+        center.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification, object: nil, queue: .main) { [weak self] _ in
+            guard let self else { return }
+            lastSpaceChange = ProcessInfo.processInfo.systemUptime
+            if !candidates.isEmpty { scheduleRefresh() } // desktop changed under an open preview
+        }
     }
 
     // One gesture = one session (≈ holding ⌘ during ⌘-Tab): steps move the selection in the
@@ -49,6 +54,11 @@ final class AppSwitcher {
     private var candidates: [NSRunningApplication] = []
     private var selected: Int?
     private lazy var hud = SwitcherHUD() // `lazy`: built on first use, then reused
+
+    // While the desktop-switch animation runs, windows of BOTH desktops count as on screen.
+    // ponytail: fixed settle time; tune if the animation is slower (e.g. Reduce Motion off + slow Mac).
+    private static let spaceSettle = 0.6
+    private var lastSpaceChange = -Double.infinity
 
     func handle(_ event: SwipeEvent) {
         switch event {
@@ -70,13 +80,32 @@ final class AppSwitcher {
 
     /// Snapshot of switchable apps: those with a window on this desktop, most recent first.
     private func beginSession() -> Bool {
-        let here = Self.appsOnCurrentDesktop() // one window-list query per gesture
-        candidates = mru.pids.filter(here.contains).compactMap { NSRunningApplication(processIdentifier: $0) }
+        candidates = switchableApps()
+        if ProcessInfo.processInfo.systemUptime - lastSpaceChange < Self.spaceSettle { scheduleRefresh() }
         let front = NSWorkspace.shared.frontmostApplication
         selected = candidates.first == front ? 0 : nil
         // A single app is still shown (confirms the gesture was read); lifting then does nothing.
         if candidates.isEmpty { selected = nil }
         return !candidates.isEmpty
+    }
+
+    private func switchableApps() -> [NSRunningApplication] {
+        let here = Self.appsOnCurrentDesktop() // one window-list query
+        return mru.pids.filter(here.contains).compactMap { NSRunningApplication(processIdentifier: $0) }
+    }
+
+    /// Re-reads the list once the desktop switch has settled, keeping the selected app selected.
+    private func scheduleRefresh() {
+        let delay = lastSpaceChange + Self.spaceSettle - ProcessInfo.processInfo.systemUptime
+        DispatchQueue.main.asyncAfter(deadline: .now() + max(delay, 0)) { [weak self] in
+            guard let self, let selected, candidates.indices.contains(selected) else { return } // gesture over
+            let fresh = switchableApps()
+            guard !fresh.isEmpty else { return }
+            let kept = candidates[selected]
+            candidates = fresh
+            self.selected = fresh.firstIndex(of: kept) ?? 0
+            hud.show(candidates, selected: self.selected!)
+        }
     }
 
     private func activate(_ app: NSRunningApplication) {
