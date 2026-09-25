@@ -30,9 +30,10 @@ It works like holding ⌘ and pressing Tab, but on the trackpad.
 
 ## Install
 
-1. Download `SwipeSwitcher-<version>.zip` from the
-   [latest release](https://github.com/haonlabs/SwipeSwitcher/releases/latest) and unzip it.
-2. Move **SwipeSwitcher.app** to **Applications** and open it.
+1. Download `SwipeSwitcher-<version>.dmg` from the
+   [latest release](https://github.com/haonlabs/SwipeSwitcher/releases/latest) and open it
+   (a `.zip` is available too).
+2. Drag **SwipeSwitcher** onto the **Applications** shortcut, then open it from Applications.
 3. The app is not notarized, so macOS blocks the first launch. Open
    **System Settings → Privacy & Security**, scroll down to **Security**, click
    **Open Anyway** next to SwipeSwitcher, and confirm. You only need to do this once per version.
@@ -80,6 +81,7 @@ falling back to ad-hoc. With ad-hoc signing, macOS forgets the Accessibility per
 rebuild, so create a certificate once: **Keychain Access → Certificate Assistant → Create a
 Certificate**, Identity Type *Self Signed Root*, Certificate Type *Code Signing*.
 
+`scripts/make-dmg.sh` packs the built app into a drag-to-install DMG.
 `swift scripts/render-icon.swift` regenerates `AppIcon.icns`, and `./bench.sh SwipeSwitcher 60`
 samples CPU, idle wakeups, and energy impact, so you can compare against other tools.
 
