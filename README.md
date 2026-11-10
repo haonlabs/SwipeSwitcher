@@ -18,8 +18,11 @@ It works like holding ⌘ and pressing Tab, but on the trackpad.
   window are left out
 - **Resolves gesture conflicts for you**: if macOS already uses the same swipe to switch
   desktops, SwipeSwitcher offers to move desktop switching to the other finger count
-- **Optional scroll blocking** while the gesture is in progress (needs Accessibility)
+- **Optional scroll and navigation-gesture blocking in all apps** through the complete gesture
+  (needs Accessibility)
 - Adjustable distance per step (10 / 15 / 25 % of the trackpad width) and steps per gesture
+- Preview limited to reachable apps: the current app plus up to 1 or 3 recent apps, or all apps
+- Reverse direction without lifting your fingers to correct the selection, even at the step limit
 - Launch at login
 - Menu bar only, no Dock icon
 
@@ -46,9 +49,12 @@ It works like holding ⌘ and pressing Tab, but on the trackpad.
   desktop switching moves to the other finger count if that one is free. You can change it
   back anytime in **System Settings → Trackpad → More Gestures**.
 - **Scroll blocking (optional).** Moving several fingers also makes the app under the pointer
-  scroll. To stop that, choose **Block Scrolling During Gesture** from the menu bar icon and allow
+  scroll or navigate back/forward. To stop that in all apps, choose **Block Scrolling and
+  Navigation Gestures** from the menu bar icon and allow
   SwipeSwitcher under **Privacy & Security → Accessibility**. Without this permission, everything
-  else still works.
+  else still works. Blocking continues until every finger lifts and the gesture's momentum ends;
+  ordinary two-finger gestures remain available outside an app-switch gesture, in browsers and
+  native apps alike.
 - **3-finger mode.** If you choose 3 fingers, turn off **Three-finger drag** under
   **Accessibility → Pointer Control → Trackpad Options**.
 
@@ -56,13 +62,23 @@ It works like holding ⌘ and pressing Tab, but on the trackpad.
 
 | Gesture | Result |
 |---|---|
-| Four fingers, slide right | Preview opens and selects the previous app |
+| Four fingers, slide right | Selects the previous app; preview appears after 150 ms |
 | Keep sliding right / left | Selection moves one app per step |
 | Lift fingers | Switch to the selected app |
 | Slide back to the first icon, then lift | Cancel (stay in the current app) |
 
+Quick swipes switch apps as soon as you lift your fingers, without flashing the preview.
+
+With **Up to 3 apps**, the preview shows at most four icons: the current app and the three
+most recent alternatives. Reaching the step limit stops further movement in that direction;
+sliding back still moves the selection without starting a new gesture.
+
 The menu bar icon (✋) has the settings: finger count, step distance, steps per gesture,
 scroll blocking, and launch at login.
+
+| Light appearance | Dark appearance |
+|---|---|
+| ![Selected app in light appearance](docs/previews/switcher-light.png) | ![Selected app in dark appearance](docs/previews/switcher-dark.png) |
 
 ## Build from source
 
@@ -81,6 +97,10 @@ falling back to ad-hoc. With ad-hoc signing, macOS forgets the Accessibility per
 rebuild, so create a certificate once: **Keychain Access → Certificate Assistant → Create a
 Certificate**, Identity Type *Self Signed Root*, Certificate Type *Code Signing*.
 
+If Accessibility still shows SwipeSwitcher as enabled but a locally rebuilt app cannot block
+scrolling, remove that entry and add the rebuilt app again, then relaunch it. macOS can retain
+the original release's signing requirement even when the enabled entry points to the local app.
+
 `scripts/make-dmg.sh` packs the built app into a drag-to-install DMG.
 `swift scripts/render-icon.swift` regenerates `AppIcon.icns`, and `./bench.sh SwipeSwitcher 60`
 samples CPU, idle wakeups, and energy impact, so you can compare against other tools.
@@ -97,8 +117,8 @@ so it is kept cheap:
 - Ordinary one- and two-finger use exits after a single integer comparison. It takes no lock,
   allocates nothing, and never wakes the main thread.
 - The main thread is woken only when a step fires or the fingers lift.
-- There are no timers or polling. App activation and quit notifications keep the MRU list up
-  to date.
+- There is no polling. One delayed callback per gesture controls preview visibility; app
+  activation and quit notifications keep the MRU list up to date.
 - The scroll-blocking event tap is disabled except while the gesture fingers are down, so your
   normal scrolling never passes through the app.
 - Touch devices are stopped during sleep and restarted on wake.

@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+- The selected app now has a neutral, appearance-aware background and outline that remain visible in
+  both light and dark appearances.
+- The app name is positioned below the selected icon instead of centered below the whole preview.
+- The preview now respects Steps per Gesture, showing the current app plus only the reachable
+  recent apps. Unlimited still shows all switchable apps.
+- Reversing a swipe moves back through the selection without lifting fingers, including after
+  reaching the step limit. Returning to the current app and lifting closes the preview.
+- Quick gestures commit immediately without flashing the preview. The preview appears only
+  if the gesture continues for 150 ms after the first step.
+- Scroll blocking now lasts until every finger lifts, including when only two fingers remain
+  and the app underneath might otherwise start a navigation gesture. The protection applies
+  to all apps, including browsers and native apps. Empty contact frames also end
+  the gesture correctly.
+- The scroll filter is prepared at launch when Accessibility access is available, avoiding
+  filter creation during the first gesture. It remains disabled while idle.
+
 ## 1.0.2
 
 ### Fixed

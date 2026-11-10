@@ -8,7 +8,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let switcher = AppSwitcher()
     private let defaults = UserDefaults.standard // ≈ SharedPreferences
     private let loginItem = NSMenuItem(title: "Launch at Login", action: #selector(toggleLogin), keyEquivalent: "")
-    private let scrollItem = NSMenuItem(title: "Block Scrolling During Gesture (Accessibility)", action: #selector(askScrollPermission), keyEquivalent: "")
+    private let scrollItem = NSMenuItem(title: "Block Scrolling and Navigation Gestures (Accessibility)", action: #selector(askScrollPermission), keyEquivalent: "")
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         defaults.register(defaults: ["fingers": 4, "threshold": 10, "maxSteps": Int.max])
@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.menu = makeMenu()
 
         onSwipe = { [switcher] in switcher.handle($0) }
+        prepareScrollBlocking()
         startMultitouch()
         // Trackpad callbacks die across sleep; stopping first also means zero work while asleep.
         let center = NSWorkspace.shared.notificationCenter

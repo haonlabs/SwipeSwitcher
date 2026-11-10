@@ -16,6 +16,7 @@ final class SwitcherHUD {
                                 backing: .buffered, defer: true)
     private let icons = NSStackView()
     private let name = NSTextField(labelWithString: "")
+    private var nameCenter: NSLayoutConstraint!
     private var shown: [NSRunningApplication] = []
 
     init() {
@@ -39,7 +40,11 @@ final class SwitcherHUD {
         name.alignment = .center
         name.lineBreakMode = .byTruncatingTail // long names must not widen the panel
         name.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let column = NSStackView(views: [icons, name]) // ≈ Flutter Column
+        let nameRow = NSView()
+        name.translatesAutoresizingMaskIntoConstraints = false
+        nameRow.addSubview(name)
+        nameCenter = name.centerXAnchor.constraint(equalTo: icons.leadingAnchor)
+        let column = NSStackView(views: [icons, nameRow]) // ≈ Flutter Column
         column.orientation = .vertical
         column.spacing = 6
         column.edgeInsets = NSEdgeInsets(top: 14, left: 14, bottom: 12, right: 14)
@@ -49,6 +54,12 @@ final class SwitcherHUD {
         let screenLayer = NSView() // full-screen, event-catching; the HUD box sits in its center
         screenLayer.addSubview(background)
         NSLayoutConstraint.activate([
+            nameCenter,
+            nameRow.widthAnchor.constraint(equalTo: icons.widthAnchor),
+            nameRow.heightAnchor.constraint(equalTo: name.heightAnchor),
+            name.topAnchor.constraint(equalTo: nameRow.topAnchor),
+            name.leadingAnchor.constraint(greaterThanOrEqualTo: nameRow.leadingAnchor),
+            name.trailingAnchor.constraint(lessThanOrEqualTo: nameRow.trailingAnchor),
             column.leadingAnchor.constraint(equalTo: background.leadingAnchor),
             column.trailingAnchor.constraint(equalTo: background.trailingAnchor),
             column.topAnchor.constraint(equalTo: background.topAnchor),
@@ -62,9 +73,10 @@ final class SwitcherHUD {
     func show(_ apps: [NSRunningApplication], selected: Int) {
         if apps != shown { rebuild(apps) }
         for (i, cell) in icons.arrangedSubviews.enumerated() {
-            cell.layer?.backgroundColor = i == selected ? NSColor.white.withAlphaComponent(0.22).cgColor : nil
+            (cell as? SwitcherIconView)?.isSelected = i == selected
         }
         name.stringValue = apps[selected].localizedName ?? ""
+        nameCenter.constant = CGFloat(selected) * (Self.cellSize + icons.spacing) + Self.cellSize / 2
         if !panel.isVisible {
             // Cover the screen under the pointer (where the user is looking and scrolling).
             let screen = NSScreen.screens.first { $0.frame.contains(NSEvent.mouseLocation) } ?? NSScreen.main
@@ -83,13 +95,52 @@ final class SwitcherHUD {
         for app in apps {
             let image = (app.icon?.copy() as? NSImage) ?? NSImage()
             image.size = NSSize(width: Self.iconSize, height: Self.iconSize)
-            let cell = NSImageView(image: image)
-            cell.imageScaling = .scaleNone // icon keeps 64pt, the extra space is the highlight margin
+            let cell = SwitcherIconView(image: image)
             cell.wantsLayer = true
             cell.layer?.cornerRadius = 14
             cell.widthAnchor.constraint(equalToConstant: Self.cellSize).isActive = true
             cell.heightAnchor.constraint(equalToConstant: Self.cellSize).isActive = true
             icons.addArrangedSubview(cell)
         }
+    }
+}
+
+/// Resolve the selection's layer colors again when the system appearance changes.
+final class SwitcherIconView: NSView {
+    convenience init(image: NSImage) {
+        self.init(frame: .zero)
+        let icon = NSImageView(image: image)
+        icon.imageScaling = .scaleNone // icon keeps 64pt, the extra space is the highlight margin
+        icon.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(icon)
+        NSLayoutConstraint.activate([
+            icon.leadingAnchor.constraint(equalTo: leadingAnchor),
+            icon.trailingAnchor.constraint(equalTo: trailingAnchor),
+            icon.topAnchor.constraint(equalTo: topAnchor),
+            icon.bottomAnchor.constraint(equalTo: bottomAnchor),
+        ])
+    }
+
+    var isSelected = false {
+        didSet { needsDisplay = true }
+    }
+
+    override var wantsUpdateLayer: Bool { true }
+
+    override func updateLayer() {
+        super.updateLayer()
+        effectiveAppearance.performAsCurrentDrawingAppearance {
+            let dark = effectiveAppearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            let contrast = dark ? NSColor.white : NSColor.black
+            layer?.backgroundColor = isSelected
+                ? contrast.withAlphaComponent(dark ? 0.28 : 0.16).cgColor : nil
+            layer?.borderColor = isSelected ? contrast.withAlphaComponent(0.35).cgColor : nil
+            layer?.borderWidth = isSelected ? 1 : 0
+        }
+    }
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        needsDisplay = true
     }
 }
