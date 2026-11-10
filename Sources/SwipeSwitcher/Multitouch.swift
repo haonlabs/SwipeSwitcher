@@ -18,6 +18,7 @@ private let touchingState: Int32 = 4
 // ponytail: one detector for all trackpads; assumes the framework delivers frames on one thread.
 // Use a detector per device if two trackpads touched at the same time ever matters.
 private var detector = SwipeDetector()
+private var scrollSession = GestureScrollSession()
 private var devices: CFArray?
 
 // A C function pointer can't capture context (unlike a Kotlin lambda), so it only touches globals.
@@ -26,27 +27,31 @@ private var devices: CFArray?
 private let contactCallback: MTContactCallback = { _, touches, count, timestamp, _ in
     let need = fingerSetting.load(ordering: .relaxed)
     // Hot path: normal 1–2 finger use exits here — no lock, no allocation, no thread hop.
-    if count < need && !detector.isTracking { return 0 }
-    guard let touches else { return 0 }
+    if count < need && !detector.isTracking && !scrollSession.blocksScroll { return 0 }
+    guard count == 0 || touches != nil else { return 0 }
 
     var fingers = 0
     var sumX: Float = 0, sumY: Float = 0
-    for i in 0..<Int(count) where touches[i].state == touchingState {
-        fingers += 1
-        sumX += touches[i].normalized.position.x
-        sumY += touches[i].normalized.position.y
+    if let touches {
+        for i in 0..<Int(count) where touches[i].state == touchingState {
+            fingers += 1
+            sumX += touches[i].normalized.position.x
+            sumY += touches[i].normalized.position.y
+        }
     }
     let n = Float(max(fingers, 1))
-    let wasTracking = detector.isTracking
+    let wasBlocking = scrollSession.blocksScroll
     let result = detector.update(
         fingers: fingers, x: sumX / n, y: sumY / n, time: timestamp, need: need,
         threshold: Float(thresholdPercent.load(ordering: .relaxed)) / 100,
         maxSteps: maxStepsSetting.load(ordering: .relaxed)
     )
-    // Once per gesture (fingers land / lift): start/stop swallowing their scroll events.
-    if detector.isTracking != wasTracking {
-        gestureActive.store(detector.isTracking, ordering: .relaxed)
-        if detector.isTracking { DispatchQueue.main.async { enableScrollBlocking() } }
+    // Keep swallowing scrolls until ALL contacts lift. Remaining two fingers can otherwise
+    // start a new scroll phase that the app underneath interprets as navigation.
+    scrollSession.update(contacts: Int(count), isTracking: detector.isTracking)
+    if scrollSession.blocksScroll != wasBlocking {
+        gestureActive.store(scrollSession.blocksScroll, ordering: .relaxed)
+        if scrollSession.blocksScroll { DispatchQueue.main.async { enableScrollBlocking() } }
     }
     guard let event = result else { return 0 }
 
@@ -94,7 +99,8 @@ struct SwipeDetector {
 
     private var last: SIMD2<Float>?
     private var moved = SIMD2<Float>.zero
-    private var steps = 0
+    private var steps = 0 // signed distance from the start, so reversing gives steps back
+    private var hadSteps = false
     private var mismatchSince: Double?
     private var lastFire = -Double.infinity
 
@@ -124,24 +130,31 @@ struct SwipeDetector {
             mismatchSince = nil
             return nil
         }
-        moved += point - previous
+        let delta = point - previous
+        // Start measuring from the turn, including after pushing against the step limit.
+        // Otherwise overshoot would have to be retraced before the selection could move back.
+        if hadSteps && delta.x * moved.x < 0 { moved = .zero }
+        moved += delta
         last = point
 
-        guard steps < maxSteps, time - lastFire >= Self.cooldown,
+        guard time - lastFire >= Self.cooldown,
               abs(moved.x) >= threshold, abs(moved.x) > abs(moved.y) * Self.dominance
         else { return nil }
-        steps += 1
-        lastFire = time
         let direction = moved.x > 0 ? 1 : -1
+        guard direction > 0 ? steps < maxSteps : steps > -maxSteps else { return nil }
+        steps += direction
+        hadSteps = true
+        lastFire = time
         moved = .zero // multi-step: the next app needs another full threshold of travel
         return .step(direction)
     }
 
     private mutating func end() -> SwipeEvent? {
-        let hadSteps = steps > 0
+        let shouldEnd = hadSteps
         last = nil
         mismatchSince = nil
         steps = 0
-        return hadSteps ? .end : nil
+        hadSteps = false
+        return shouldEnd ? .end : nil
     }
 }

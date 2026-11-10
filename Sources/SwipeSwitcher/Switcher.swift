@@ -25,6 +25,13 @@ func carouselIndex(from index: Int?, step: Int, count: Int) -> Int {
     return (index + step + count) % count
 }
 
+/// Only show apps reachable within the gesture's step limit. The current app, when present,
+/// is the starting point rather than a step. Check the count first to avoid overflowing Int.max.
+func gestureCandidates<T>(_ apps: [T], maxSteps: Int, includesCurrentApp: Bool) -> [T] {
+    guard maxSteps < apps.count else { return apps }
+    return Array(apps.prefix(max(0, maxSteps) + (includesCurrentApp ? 1 : 0)))
+}
+
 /// Glue between `MRU` and the system. Everything here runs on the main thread.
 final class AppSwitcher {
     private var mru: MRU
@@ -53,7 +60,12 @@ final class AppSwitcher {
     // preview, lifting the fingers switches.
     private var candidates: [NSRunningApplication] = []
     private var selected: Int?
+    private var sessionMaxSteps = Int.max
     private lazy var hud = SwitcherHUD() // `lazy`: built on first use, then reused
+    private lazy var preview = PreviewDelay(show: { [weak self] in
+        guard let self, let selected, candidates.indices.contains(selected) else { return }
+        hud.show(candidates, selected: selected)
+    }, hide: { [weak self] in self?.hud.hide() })
 
     // While the desktop-switch animation runs, windows of BOTH desktops count as on screen.
     // ponytail: fixed settle time; tune if the animation is slower (e.g. Reduce Motion off + slow Mac).
@@ -65,9 +77,9 @@ final class AppSwitcher {
         case .step(let direction):
             if candidates.isEmpty && !beginSession() { return }
             selected = carouselIndex(from: selected, step: direction, count: candidates.count)
-            hud.show(candidates, selected: selected!)
+            preview.update()
         case .end:
-            hud.hide()
+            preview.end()
             // `.end` can arrive without a session (e.g. only one app on this desktop), so check the index.
             if let selected, candidates.indices.contains(selected),
                candidates[selected] != NSWorkspace.shared.frontmostApplication {
@@ -80,6 +92,7 @@ final class AppSwitcher {
 
     /// Snapshot of switchable apps: those with a window on this desktop, most recent first.
     private func beginSession() -> Bool {
+        sessionMaxSteps = maxStepsSetting.load(ordering: .relaxed)
         candidates = switchableApps()
         if ProcessInfo.processInfo.systemUptime - lastSpaceChange < Self.spaceSettle { scheduleRefresh() }
         let front = NSWorkspace.shared.frontmostApplication
@@ -91,7 +104,9 @@ final class AppSwitcher {
 
     private func switchableApps() -> [NSRunningApplication] {
         let here = Self.appsOnCurrentDesktop() // one window-list query
-        return mru.pids.filter(here.contains).compactMap { NSRunningApplication(processIdentifier: $0) }
+        let apps = mru.pids.filter(here.contains).compactMap { NSRunningApplication(processIdentifier: $0) }
+        return gestureCandidates(apps, maxSteps: sessionMaxSteps,
+                                 includesCurrentApp: apps.first == NSWorkspace.shared.frontmostApplication)
     }
 
     /// Re-reads the list once the desktop switch has settled, keeping the selected app selected.
@@ -104,7 +119,7 @@ final class AppSwitcher {
             let kept = candidates[selected]
             candidates = fresh
             self.selected = fresh.firstIndex(of: kept) ?? 0
-            hud.show(candidates, selected: self.selected!)
+            preview.update()
         }
     }
 
